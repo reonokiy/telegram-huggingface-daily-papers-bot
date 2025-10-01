@@ -1,0 +1,15 @@
+[project]
+name = "telegram-huggingface-daily-papers-bot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.14.2",
+    "opendal>=0.46.0",
+    "pandas>=2.3.3",
+    "pyarrow>=21.0.0",
+    "pydantic>=2.11.9",
+    "python-telegram-bot>=22.5",
+    "requests>=2.32.5",
+]

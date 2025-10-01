@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Data and cache
+data/
+*.parquet
+*.json
+papers_cache.json
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+README.md
+USAGE.md
+*.md
+
+# Tests
+test.fish
+start.fish
+
+# Environment
+.env
+.env.local
+.env.example
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-bake.hcl
+
+# Logs
+*.log
