@@ -7,9 +7,15 @@ from typing import Set
 class PaperCache:
     """论文缓存管理器"""
     
-    def __init__(self, cache_file: str = "papers_cache.json"):
+    def __init__(self, cache_file: str = "papers_cache.json", initial_ids: Set[str] = None):
         self.cache_file = Path(cache_file)
         self.cached_ids: Set[str] = self._load_cache()
+        
+        # 如果提供了初始 ID 集合（比如从存储加载），则合并
+        if initial_ids:
+            self.cached_ids.update(initial_ids)
+            self._save_cache()
+            print(f"✅ 缓存已初始化，共 {len(self.cached_ids)} 个论文 ID")
     
     def _load_cache(self) -> Set[str]:
         """从文件加载已缓存的论文ID"""
@@ -19,7 +25,7 @@ class PaperCache:
                     data = json.load(f)
                     return set(data.get('paper_ids', []))
             except Exception as e:
-                print(f"加载缓存失败: {e}")
+                print(f"⚠️  加载缓存失败: {e}")
                 return set()
         return set()
     

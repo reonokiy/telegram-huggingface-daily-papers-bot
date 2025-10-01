@@ -1,4 +1,16 @@
-# 🤖 HuggingFace Daily Papers Bot
+# 🤖## ✨ 功能特性
+
+- 🕷️ 使用 BeautifulSoup4 爬取 HuggingFace Papers 页面
+- 📝 获取论文标题、作者、完整摘要和缩略图
+- 🔗 自动提取 arXiv URL
+- 💾 智能缓存机制，基于 Parquet 存储避免重复推送
+- 💿 Parquet 格式本地存储，支持增量更新和去重
+- ☁️ 自动月度归档并上传到 S3（可选）
+- 🔧 使用 OpenDAL 统一文件访问接口
+- 🌐 可选 AI 翻译功能（支持多语言摘要）
+- ⏱️ 定时检查（可配置间隔时间）
+- 📢 自动推送新论文到 Telegram 频道
+- 🖼️ 支持图片预览 Daily Papers Bot
 
 自动爬取 HuggingFace 每日热门论文并推送到 Telegram 频道的机器人。
 

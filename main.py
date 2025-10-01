@@ -15,14 +15,22 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "@your_channel")  # 频道ID或@频道名
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "3600"))  # 检查间隔（秒），默认1小时
 
+# AI 翻译配置
+ENABLE_AI_TRANSLATION = os.getenv("ENABLE_AI_TRANSLATION", "false").lower() == "true"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+TRANSLATION_TARGET_LANG = os.getenv("TRANSLATION_TARGET_LANG", "Chinese")  # 目标语言
+
 
 class HuggingFacePaperBot:
     """HuggingFace论文推送Bot"""
     
-    def __init__(self, token: str, channel_id: str):
+    def __init__(self, token: str, channel_id: str, enable_translation: bool = False):
         self.bot = Bot(token=token)
         self.channel_id = channel_id
-        self.cache = PaperCache()
+        
+        # 初始化存储
         self.storage = PaperStorage(
             local_data_dir="data",
             s3_bucket=os.getenv("S3_BUCKET"),
@@ -31,7 +39,60 @@ class HuggingFacePaperBot:
             s3_secret_key=os.getenv("S3_SECRET_KEY"),
         )
         
-    def format_paper_message(self, paper: Paper) -> str:
+        # 从存储中加载所有已保存的论文 ID，并初始化缓存
+        stored_paper_ids = self.storage.load_all_paper_ids()
+        self.cache = PaperCache(initial_ids=stored_paper_ids)
+        
+        self.enable_translation = enable_translation
+        
+        # 初始化 OpenAI 客户端（如果启用翻译）
+        if self.enable_translation:
+            if not OPENAI_API_KEY:
+                print("⚠️  警告: 启用了翻译但未配置 OPENAI_API_KEY，翻译功能将被禁用")
+                self.enable_translation = False
+            else:
+                try:
+                    from openai import OpenAI
+                    self.openai_client = OpenAI(
+                        api_key=OPENAI_API_KEY,
+                        base_url=OPENAI_BASE_URL
+                    )
+                    print(f"✅ AI 翻译已启用 (模型: {OPENAI_MODEL}, 目标语言: {TRANSLATION_TARGET_LANG})")
+                except ImportError:
+                    print("⚠️  警告: 未安装 openai 库，翻译功能将被禁用")
+                    print("    请运行: pip install openai")
+                    self.enable_translation = False
+    
+    async def translate_text(self, text: str) -> str:
+        """使用 AI 翻译文本"""
+        if not self.enable_translation:
+            return text
+        
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"You are a professional translator. Translate the following academic abstract to {TRANSLATION_TARGET_LANG}. Keep technical terms in English when appropriate. Provide only the translation without any explanations."
+                    },
+                    {
+                        "role": "user",
+                        "content": text
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=1000
+            )
+            
+            translation = response.choices[0].message.content.strip()
+            return translation
+        
+        except Exception as e:
+            print(f"⚠️  翻译失败: {e}")
+            return text  # 翻译失败时返回原文
+        
+    def format_paper_message(self, paper: Paper, translated_abstract: str = None) -> str:
         """格式化论文消息"""
         # 转义Markdown特殊字符
         def escape_markdown(text: str) -> str:
@@ -46,8 +107,13 @@ class HuggingFacePaperBot:
             authors += f" et al. ({len(paper.authors)} authors)"
         authors = escape_markdown(authors) if authors else "Unknown"
         
-        # 摘要截取前300字符
-        abstract = paper.abstract[:300] + "..." if len(paper.abstract) > 300 else paper.abstract
+        # 如果有翻译，使用翻译后的摘要，否则使用原始摘要
+        if translated_abstract:
+            abstract = translated_abstract
+        else:
+            # 摘要截取前300字符
+            abstract = paper.abstract[:300] + "..." if len(paper.abstract) > 300 else paper.abstract
+        
         abstract = escape_markdown(abstract) if abstract else "No abstract available"
         
         message = f"*{title}*\n\n"
@@ -61,7 +127,13 @@ class HuggingFacePaperBot:
     async def send_paper(self, paper: Paper):
         """发送单篇论文到频道"""
         try:
-            message = self.format_paper_message(paper)
+            # 如果启用翻译，先翻译摘要
+            translated_abstract = None
+            if self.enable_translation and paper.abstract:
+                print("  🌐 正在翻译摘要...")
+                translated_abstract = await self.translate_text(paper.abstract[:500])  # 只翻译前500字符
+            
+            message = self.format_paper_message(paper, translated_abstract)
             
             # 如果有缩略图，发送带图片的消息
             if paper.hero_image:
@@ -104,23 +176,25 @@ class HuggingFacePaperBot:
             
             print(f"🆕 发现 {len(new_papers)} 篇新论文")
             
+            # 保存所有论文数据到本地 Parquet 文件（包括新论文和已存在的论文）
+            if papers:
+                self.storage.save_daily_papers(papers, today)
+            
             # 发送新论文
+            sent_papers = []
             for paper in new_papers:
                 success = await self.send_paper(paper)
                 if success:
-                    # 添加到缓存
-                    self.cache.add(paper.get_paper_id())
+                    sent_papers.append(paper)
                     # 避免发送过快
                     await asyncio.sleep(2)
             
-            if new_papers:
-                print(f"✨ 成功推送 {len(new_papers)} 篇新论文")
+            # 批量添加到缓存
+            if sent_papers:
+                self.cache.add_batch([p.get_paper_id() for p in sent_papers])
+                print(f"✨ 成功推送 {len(sent_papers)} 篇新论文")
             else:
                 print("💤 没有新论文")
-            
-            # 保存论文数据到本地 Parquet 文件
-            if papers:
-                self.storage.save_daily_papers(papers, today)
             
             # 检查是否需要月度归档（每月1号执行上个月的归档）
             if today.day == 1:
@@ -162,7 +236,11 @@ async def main():
         return
     
     # 启动Bot
-    bot = HuggingFacePaperBot(TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID)
+    bot = HuggingFacePaperBot(
+        TELEGRAM_BOT_TOKEN, 
+        TELEGRAM_CHANNEL_ID,
+        enable_translation=ENABLE_AI_TRANSLATION
+    )
     await bot.run()
 
 

@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4>=4.14.2",
     "opendal>=0.46.0",
+    "openai>=1.58.1",
     "pandas>=2.3.3",
     "pyarrow>=21.0.0",
     "pydantic>=2.11.9",

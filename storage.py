@@ -60,14 +60,10 @@ class PaperStorage:
         }
     
     def save_daily_papers(self, papers: List[Paper], target_date: date):
-        """保存每日论文数据到 Parquet 文件"""
+        """保存每日论文数据到 Parquet 文件（增量更新）"""
         if not papers:
             print(f"没有论文数据需要保存 ({target_date})")
             return None
-        
-        # 转换为 DataFrame
-        data = [self._paper_to_dict(paper) for paper in papers]
-        df = pd.DataFrame(data)
         
         # 生成文件路径：data/YYYY/MM/papers_YYYY-MM-DD.parquet
         year_dir = self.local_data_dir / str(target_date.year)
@@ -77,9 +73,30 @@ class PaperStorage:
         filename = f"papers_{target_date.strftime('%Y-%m-%d')}.parquet"
         filepath = month_dir / filename
         
+        # 转换新论文为 DataFrame
+        new_data = [self._paper_to_dict(paper) for paper in papers]
+        new_df = pd.DataFrame(new_data)
+        
+        # 如果文件已存在，加载并合并去重
+        if filepath.exists():
+            try:
+                existing_df = pd.read_parquet(filepath)
+                # 合并新旧数据
+                combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+                # 去重（基于 paper_id，保留第一次出现的）
+                combined_df = combined_df.drop_duplicates(subset=['paper_id'], keep='first')
+                df = combined_df
+                print(f"✓ 合并数据: 原有 {len(existing_df)} 篇 + 新增 {len(new_df)} 篇 = 去重后 {len(df)} 篇")
+            except Exception as e:
+                print(f"⚠️  读取现有文件失败，将覆盖: {e}")
+                df = new_df
+        else:
+            df = new_df
+            print(f"✓ 创建新文件: {len(df)} 篇论文")
+        
         # 保存为 Parquet 文件
         df.to_parquet(filepath, engine='pyarrow', compression='snappy', index=False)
-        print(f"✓ 已保存 {len(papers)} 篇论文到: {filepath}")
+        print(f"✓ 已保存到: {filepath}")
         
         return filepath
     
@@ -184,6 +201,34 @@ class PaperStorage:
         
         df = pd.read_parquet(filepath)
         return df.to_dict('records')
+    
+    def load_all_paper_ids(self) -> set:
+        """从所有 Parquet 文件中加载已存储的论文 ID"""
+        paper_ids = set()
+        
+        if not self.local_data_dir.exists():
+            return paper_ids
+        
+        # 遍历所有年份和月份目录
+        for year_dir in self.local_data_dir.iterdir():
+            if not year_dir.is_dir():
+                continue
+            
+            for month_dir in year_dir.iterdir():
+                if not month_dir.is_dir():
+                    continue
+                
+                # 读取该月份的所有 parquet 文件
+                files = list(month_dir.glob("papers_*.parquet"))
+                for file in files:
+                    try:
+                        df = pd.read_parquet(file, columns=['paper_id'])
+                        paper_ids.update(df['paper_id'].tolist())
+                    except Exception as e:
+                        print(f"⚠️  读取文件失败 {file}: {e}")
+        
+        print(f"📚 从存储中加载了 {len(paper_ids)} 个论文 ID")
+        return paper_ids
     
     def get_statistics(self) -> dict:
         """获取存储统计信息"""
