@@ -202,20 +202,20 @@ class HuggingFacePaperBot:
                 if paper.hero_image:
                     # 带图片：先总结到合适长度，再翻译
                     print("  🤖 使用 AI 总结摘要...")
-                    summarized = await self.summarize_abstract(paper.abstract, max_length=300)
+                    summarized = await self.summarize_abstract(paper.abstract, max_length=500)
                     print("  🌐 翻译摘要...")
                     processed_abstract = await self.translate_text(summarized)
                 else:
                     # 纯文本：直接翻译（可以更长）
                     print("  🌐 翻译摘要...")
-                    summarized = await self.summarize_abstract(paper.abstract, max_length=600)
+                    summarized = await self.summarize_abstract(paper.abstract, max_length=1000)
                     processed_abstract = await self.translate_text(summarized)
             elif paper.abstract:
                 # 没有启用 AI，只做长度控制
                 if paper.hero_image:
-                    processed_abstract = paper.abstract[:300] + "..." if len(paper.abstract) > 300 else paper.abstract
+                    processed_abstract = paper.abstract[:500] + "..." if len(paper.abstract) > 500 else paper.abstract
                 else:
-                    processed_abstract = paper.abstract[:800] + "..." if len(paper.abstract) > 800 else paper.abstract
+                    processed_abstract = paper.abstract[:1000] + "..." if len(paper.abstract) > 1000 else paper.abstract
             
             # 格式化并发送消息
             if paper.hero_image:
