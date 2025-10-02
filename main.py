@@ -140,7 +140,11 @@ class HuggingFacePaperBot:
                 text = text.replace(char, f'\\{char}')
             return text
         
-        title = escape_markdown(paper.title.strip())
+        # 清理标题：去除换行符和多余空格
+        title = paper.title.strip()
+        title = ' '.join(title.split())  # 将所有空白字符（包括换行）替换为单个空格
+        title = escape_markdown(title)
+        
         authors = ", ".join(paper.authors[:5])  # 只显示前5位作者
         if len(paper.authors) > 5:
             authors += f" et al. ({len(paper.authors)} authors)"
