@@ -312,71 +312,59 @@ python main.py## 📋 如何获取 Telegram 配置
 
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | 必填 |
 
-### AI 翻译配置| `TELEGRAM_CHANNEL_ID` | Telegram 频道 ID | 必填 |
-
+| `TELEGRAM_CHANNEL_ID` | Telegram 频道 ID | 必填 |
 | `CHECK_INTERVAL` | 检查间隔（秒） | 3600 |
 
-| 环境变量 | 说明 | 默认值 || `S3_BUCKET` | S3 存储桶名称 | 可选 |
+### AI 翻译配置
 
-|---------|------|--------|| `S3_ENDPOINT` | S3 端点 URL | 可选 |
-
-| `ENABLE_AI_TRANSLATION` | 是否启用翻译 | false || `S3_REGION` | S3 区域 | us-east-1 |
-
-| `OPENAI_API_KEY` | OpenAI API Key | - || `S3_ACCESS_KEY` | S3 访问密钥 | 可选 |
-
-| `OPENAI_BASE_URL` | OpenAI API 端点 | https://api.openai.com/v1 || `S3_SECRET_KEY` | S3 秘密密钥 | 可选 |
-
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `ENABLE_AI_TRANSLATION` | 是否启用翻译 | false |
+| `OPENAI_API_KEY` | OpenAI API Key | - |
+| `OPENAI_BASE_URL` | OpenAI API 端点 | https://api.openai.com/v1 |
 | `OPENAI_MODEL` | 使用的模型 | gpt-4o-mini |
+| `TRANSLATION_TARGET_LANG` | 目标语言 | Chinese |
 
-| `TRANSLATION_TARGET_LANG` | 目标语言 | Chinese |## � 数据存储说明
+### 数据存储配置
 
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `DATA_DIR` | 数据目录路径 | `data` |
+| `ARCHIVE_DIR` | 归档目录路径 | `data/archive` |
 
+**注意**: 归档目录应独立于数据目录，不要设置为数据目录的子目录。
 
-### S3 存储配置### 本地存储
+## 💾 数据存储说明
 
+### 本地存储
 
+Bot 会将每天采集的论文数据保存为 Parquet 格式：
 
-| 环境变量 | 说明 | 默认值 |Bot 会将每天采集的论文数据保存为 Parquet 格式：
+- 路径：`data/YYYY/MM/YYYYMMDD.parquet`
+- 格式：高效的列式存储，支持快速查询和分析
+- 压缩：Snappy（58 篇论文 ≈ 0.07 MB）
+- 字段：paper_id, title, authors, abstract, url, hero_image, arxiv_url, github_url, github_stars, hf_upvotes, collected_at
+- 特性：支持增量更新和自动去重
 
-|---------|------|--------|- 路径：`data/YYYY/MM/papers_YYYY-MM-DD.parquet`
+**示例**: `data/2025/10/20251002.parquet`
 
-| `S3_BUCKET` | S3 存储桶名称 | - |- 格式：高效的列式存储，支持快速查询和分析
-
-| `S3_ENDPOINT` | S3 端点 URL | - |- 字段：paper_id, title, authors, abstract, url, hero_image, collected_at
-
-| `S3_REGION` | S3 区域 | us-east-1 |
-
-| `S3_ACCESS_KEY` | S3 访问密钥 | - |### 月度归档
-
-| `S3_SECRET_KEY` | S3 秘密密钥 | - |
+### 月度归档
 
 每月 1 号自动执行上个月的数据归档：
 
-## 💾 数据存储说明1. 合并该月所有每日数据
-
+1. 合并该月所有每日数据
 2. 去重（基于 paper_id）
+3. 生成月度文件：`YYYYMM.parquet`
+4. 保存到归档目录
 
-### 本地存储3. 生成月度文件：`papers_YYYY-MM_merged.parquet`
+归档使用 OpenDAL 文件系统存储，便于后续扩展到云存储。
 
-4. 如果配置了 S3，自动上传到云存储
+**示例**: `data/archive/2025/202510.parquet`
 
-- 路径：`data/YYYY/MM/papers_YYYY-MM-DD.parquet`
-
-- 格式：Parquet（列式存储）### S3 云存储（可选）
-
-- 压缩：Snappy（58 篇论文 ≈ 0.07 MB）
-
-- 特性：支持增量更新和自动去重配置 S3 后，月度归档会自动上传到：
-
-```
-
-### 缓存机制s3://your-bucket/papers/YYYY/MM/papers_YYYY-MM_merged.parquet
-
-```
+### 缓存机制
 
 - 文件：`papers_cache.json`
-
-- 初始化：启动时从 Parquet 文件加载所有历史论文 ID支持的 S3 兼容服务：
+- 初始化：启动时从 Parquet 文件加载所有历史论文 ID
 
 - 更新：批量更新，减少 I/O 操作- Amazon S3
 
@@ -469,14 +457,17 @@ python tests/debug_upvotes.pyBot 会在项目目录下创建 `papers_cache.json`
 - 如需重新推送所有论文，删除缓存文件即可
 
 - [CACHE_STORAGE.md](docs/CACHE_STORAGE.md) - 缓存和存储集成原理
-
-- [GITHUB_STATS.md](docs/GITHUB_STATS.md) - GitHub 统计功能详解## 🛠️ 开发测试
-
+- [FILESYSTEM_STORAGE.md](docs/FILESYSTEM_STORAGE.md) - 文件系统存储说明和扩展性
+- [GITHUB_STATS.md](docs/GITHUB_STATS.md) - GitHub 统计功能详解
 - [USAGE.md](docs/USAGE.md) - 详细使用指南
+- [DOCKER.md](docs/DOCKER.md) - Docker 部署指南
+- [PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) - 项目总结
 
-- [DOCKER.md](docs/DOCKER.md) - Docker 部署指南测试爬虫功能：
+## 🛠️ 开发测试
 
-- [PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) - 项目总结```bash
+测试爬虫功能：
+
+```bash
 
 python tests/test_arxiv.py
 

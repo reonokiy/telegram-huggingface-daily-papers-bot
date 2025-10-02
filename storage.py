@@ -1,9 +1,9 @@
-"""数据持久化模块 - 将论文数据存储为 Parquet 格式并上传到 S3"""
+"""数据持久化模块 - 将论文数据存储为 Parquet 格式"""
 import os
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, date
-from typing import List
+from typing import List, Optional
 import opendal
 import json
 
@@ -11,40 +11,58 @@ from hf import Paper
 
 
 class PaperStorage:
-    """论文数据存储管理器"""
+    """论文数据存储管理器
+    
+    使用 OpenDAL 文件系统存储数据，便于后续扩展到云存储。
+    当前版本仅支持本地文件系统。
+    """
     
     def __init__(
         self,
-        local_data_dir: str = "data",
-        s3_bucket: str = None,
-        s3_endpoint: str = None,
-        s3_region: str = "us-east-1",
-        s3_access_key: str = None,
-        s3_secret_key: str = None,
+        local_data_dir: Optional[str] = None,
+        archive_dir: Optional[str] = None,
     ):
+        """初始化存储管理器
+        
+        Args:
+            local_data_dir: 本地数据目录（默认从环境变量 DATA_DIR 读取，否则为 "data"）
+            archive_dir: 归档目录（默认从环境变量 ARCHIVE_DIR 读取，否则为 "data/archive"）
+        """
+        # 从环境变量或参数获取目录
+        if local_data_dir is None:
+            local_data_dir = os.getenv("DATA_DIR", "data")
+        if archive_dir is None:
+            archive_dir = os.getenv("ARCHIVE_DIR", "data/archive")
+        
         self.local_data_dir = Path(local_data_dir)
         self.local_data_dir.mkdir(parents=True, exist_ok=True)
         
-        # S3 配置
-        self.s3_bucket = s3_bucket
-        self.s3_enabled = bool(s3_bucket and s3_access_key and s3_secret_key)
+        # 归档目录配置（始终独立于数据目录）
+        self.archive_dir = Path(archive_dir)
+        self.archive_dir.mkdir(parents=True, exist_ok=True)
         
-        # 初始化 OpenDAL
-        self.operator = None
-        if self.s3_enabled:
-            try:
-                self.operator = opendal.Operator(
-                    "s3",
-                    bucket=s3_bucket,
-                    endpoint=s3_endpoint or "",
-                    region=s3_region,
-                    access_key_id=s3_access_key,
-                    secret_access_key=s3_secret_key,
-                )
-                print(f"✓ S3 存储已配置: {s3_bucket}")
-            except Exception as e:
-                print(f"✗ S3 配置失败: {e}")
-                self.s3_enabled = False
+        # 初始化 OpenDAL 文件系统 Operator
+        try:
+            self.operator = opendal.Operator("fs", root=str(self.archive_dir))
+            print(f"✓ 数据目录: {self.local_data_dir}")
+            print(f"✓ 归档目录: {self.archive_dir}")
+        except Exception as e:
+            print(f"⚠️  OpenDAL 初始化失败: {e}")
+            print("   将使用标准文件操作")
+            self.operator = None
+    
+    @classmethod
+    def from_env(cls) -> "PaperStorage":
+        """从环境变量创建存储管理器
+        
+        环境变量:
+            DATA_DIR: 数据目录路径（默认: data）
+            ARCHIVE_DIR: 归档目录路径（可选）
+        """
+        return cls(
+            local_data_dir=os.getenv("DATA_DIR"),
+            archive_dir=os.getenv("ARCHIVE_DIR")
+        )
     
     def _paper_to_dict(self, paper: Paper) -> dict:
         """将 Paper 对象转换为字典"""
@@ -68,12 +86,12 @@ class PaperStorage:
             print(f"没有论文数据需要保存 ({target_date})")
             return None
         
-        # 生成文件路径：data/YYYY/MM/papers_YYYY-MM-DD.parquet
+        # 生成文件路径：data/YYYY/MM/YYYYMMDD.parquet
         year_dir = self.local_data_dir / str(target_date.year)
         month_dir = year_dir / f"{target_date.month:02d}"
         month_dir.mkdir(parents=True, exist_ok=True)
         
-        filename = f"papers_{target_date.strftime('%Y-%m-%d')}.parquet"
+        filename = f"{target_date.strftime('%Y%m%d')}.parquet"
         filepath = month_dir / filename
         
         # 转换新论文为 DataFrame
@@ -109,7 +127,7 @@ class PaperStorage:
         if not month_dir.exists():
             return []
         
-        return sorted(month_dir.glob("papers_*.parquet"))
+        return sorted(month_dir.glob("*.parquet"))
     
     def merge_monthly_data(self, year: int, month: int) -> Path:
         """合并指定月份的所有数据到一个 Parquet 文件"""
@@ -129,44 +147,30 @@ class PaperStorage:
         # 去重（基于 paper_id）
         merged_df = merged_df.drop_duplicates(subset=['paper_id'], keep='first')
         
-        # 保存合并后的文件
-        merged_filename = f"papers_{year}-{month:02d}_merged.parquet"
-        merged_path = self.local_data_dir / str(year) / merged_filename
+        # 保存合并后的文件到归档目录：YYYYMM.parquet
+        merged_filename = f"{year}{month:02d}.parquet"
+        
+        # 保存到归档目录
+        archive_year_dir = self.archive_dir / str(year)
+        archive_year_dir.mkdir(parents=True, exist_ok=True)
+        merged_path = archive_year_dir / merged_filename
+        
         merged_df.to_parquet(merged_path, engine='pyarrow', compression='snappy', index=False)
         
         print(f"✓ 已合并 {len(files)} 个文件，共 {len(merged_df)} 篇论文: {merged_path}")
         return merged_path
     
-    def upload_to_s3(self, local_path: Path, s3_key: str = None) -> bool:
-        """上传文件到 S3"""
-        if not self.s3_enabled:
-            print("S3 未配置，跳过上传")
-            return False
-        
-        if not local_path.exists():
-            print(f"文件不存在: {local_path}")
-            return False
-        
-        # 生成 S3 key
-        if s3_key is None:
-            s3_key = str(local_path.relative_to(self.local_data_dir))
-        
-        try:
-            # 读取文件内容
-            with open(local_path, 'rb') as f:
-                content = f.read()
-            
-            # 上传到 S3
-            self.operator.write(s3_key, content)
-            print(f"✓ 已上传到 S3: s3://{self.s3_bucket}/{s3_key}")
-            return True
-        
-        except Exception as e:
-            print(f"✗ 上传失败: {e}")
-            return False
-    
     def archive_month(self, year: int, month: int, delete_daily_files: bool = False) -> bool:
-        """归档月度数据：合并并上传到 S3"""
+        """归档月度数据：合并到归档目录
+        
+        Args:
+            year: 年份
+            month: 月份
+            delete_daily_files: 是否删除每日文件
+            
+        Returns:
+            bool: 是否归档成功
+        """
         print(f"\n=== 开始归档 {year}-{month:02d} ===")
         
         # 1. 合并月度数据
@@ -174,20 +178,30 @@ class PaperStorage:
         if not merged_path:
             return False
         
-        # 2. 上传到 S3
-        if self.s3_enabled:
-            s3_key = f"papers/{year}/{month:02d}/papers_{year}-{month:02d}_merged.parquet"
-            success = self.upload_to_s3(merged_path, s3_key)
-            
-            if success and delete_daily_files:
-                # 3. 删除每日文件（可选）
-                files = self.get_monthly_files(year, month)
-                for file in files:
-                    try:
-                        file.unlink()
-                        print(f"✓ 已删除: {file}")
-                    except Exception as e:
-                        print(f"✗ 删除失败 {file}: {e}")
+        # 2. 使用 OpenDAL 写入（如果可用）
+        if self.operator:
+            try:
+                # 读取合并后的文件
+                with open(merged_path, 'rb') as f:
+                    content = f.read()
+                
+                # 使用 OpenDAL 写入
+                archive_key = f"{year}/{year}{month:02d}.parquet"
+                self.operator.write(archive_key, content)
+                print(f"✓ 已通过 OpenDAL 写入归档: {archive_key}")
+            except Exception as e:
+                print(f"⚠️  OpenDAL 写入失败: {e}")
+                print("   文件已保存到本地归档目录")
+        
+        # 3. 删除每日文件（可选）
+        if delete_daily_files:
+            files = self.get_monthly_files(year, month)
+            for file in files:
+                try:
+                    file.unlink()
+                    print(f"✓ 已删除每日文件: {file.name}")
+                except Exception as e:
+                    print(f"✗ 删除失败 {file}: {e}")
         
         print(f"=== 归档完成 {year}-{month:02d} ===\n")
         return True
@@ -196,7 +210,7 @@ class PaperStorage:
         """加载指定日期的论文数据"""
         year_dir = self.local_data_dir / str(target_date.year)
         month_dir = year_dir / f"{target_date.month:02d}"
-        filename = f"papers_{target_date.strftime('%Y-%m-%d')}.parquet"
+        filename = f"{target_date.strftime('%Y%m%d')}.parquet"
         filepath = month_dir / filename
         
         if not filepath.exists():
@@ -221,8 +235,8 @@ class PaperStorage:
                 if not month_dir.is_dir():
                     continue
                 
-                # 读取该月份的所有 parquet 文件
-                files = list(month_dir.glob("papers_*.parquet"))
+                # 读取该月份的所有 parquet 文件（排除月度归档文件）
+                files = [f for f in month_dir.glob("*.parquet") if len(f.stem) == 8]  # YYYYMMDD 格式
                 for file in files:
                     try:
                         df = pd.read_parquet(file, columns=['paper_id'])
@@ -269,14 +283,8 @@ if __name__ == "__main__":
     from datetime import date
     from hf import fetch_huggingface_papers
     
-    # 初始化存储（不使用 S3）
-    storage = PaperStorage(
-        local_data_dir="data",
-        s3_bucket=os.getenv("S3_BUCKET"),
-        s3_endpoint=os.getenv("S3_ENDPOINT"),
-        s3_access_key=os.getenv("S3_ACCESS_KEY"),
-        s3_secret_key=os.getenv("S3_SECRET_KEY"),
-    )
+    # 初始化存储（从环境变量加载配置）
+    storage = PaperStorage.from_env()
     
     # 获取今天的论文
     today = date.today()

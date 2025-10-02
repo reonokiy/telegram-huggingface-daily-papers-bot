@@ -30,14 +30,8 @@ class HuggingFacePaperBot:
         self.bot = Bot(token=token)
         self.channel_id = channel_id
         
-        # 初始化存储
-        self.storage = PaperStorage(
-            local_data_dir="data",
-            s3_bucket=os.getenv("S3_BUCKET"),
-            s3_endpoint=os.getenv("S3_ENDPOINT"),
-            s3_access_key=os.getenv("S3_ACCESS_KEY"),
-            s3_secret_key=os.getenv("S3_SECRET_KEY"),
-        )
+        # 初始化存储（自动从环境变量读取配置）
+        self.storage = PaperStorage.from_env()
         
         # 从存储中加载所有已保存的论文 ID，并初始化缓存
         stored_paper_ids = self.storage.load_all_paper_ids()

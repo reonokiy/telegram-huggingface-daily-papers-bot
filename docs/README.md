@@ -36,6 +36,17 @@
 - 备份策略
 - 安全建议
 
+### [FILESYSTEM_STORAGE.md](FILESYSTEM_STORAGE.md)
+**文件系统存储说明** - OpenDAL 文件系统存储架构
+
+包含内容：
+- 设计理念和优势
+- 配置方式（基本、归档、环境变量）
+- 目录结构说明
+- OpenDAL 使用示例
+- 后续扩展到云存储的路径
+- 测试指南
+
 ### [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)
 **项目完成总结** - 项目功能和实现细节
 
