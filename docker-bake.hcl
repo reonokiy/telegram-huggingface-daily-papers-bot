@@ -3,8 +3,12 @@ variable "TAG" {
   default = "latest"
 }
 
+variable "NAME" {
+  default = "telegram-huggingface-daily-papers-bot"
+}
+
 variable "REGISTRY" {
-  default = "ghcr.io/yourusername"
+  default = "ghcr.io/reonokiy"
 }
 
 group "default" {
@@ -14,8 +18,7 @@ group "default" {
 target "bot" {
   dockerfile = "Dockerfile"
   tags = [
-    "${REGISTRY}/hf-papers-bot:${TAG}",
-    "${REGISTRY}/hf-papers-bot:latest"
+    "${REGISTRY}/${NAME}:${TAG}",
   ]
   platforms = [
     "linux/amd64",
@@ -24,14 +27,7 @@ target "bot" {
   labels = {
     "org.opencontainers.image.title" = "HuggingFace Daily Papers Bot"
     "org.opencontainers.image.description" = "Telegram bot for HuggingFace daily papers"
-    "org.opencontainers.image.source" = "https://github.com/yourusername/telegram-huggingface-daily-papers-bot"
+    "org.opencontainers.image.source" = "${REGISTRY}/${NAME}"
     "org.opencontainers.image.version" = "${TAG}"
   }
-}
-
-target "bot-local" {
-  inherits = ["bot"]
-  tags = ["hf-papers-bot:local"]
-  platforms = ["linux/amd64"]
-  output = ["type=docker"]
 }

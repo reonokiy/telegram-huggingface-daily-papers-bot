@@ -119,8 +119,25 @@ class HuggingFacePaperBot:
         message = f"*{title}*\n\n"
         message += f"👥 *Authors:* {authors}\n\n"
         message += f"📄 *Abstract:* {abstract}\n\n"
-        message += f"🔗 *Read More：* [HuggingFace]({paper.url})"
-        message += f" | [ArXiv]({paper.arxiv_url})" if paper.arxiv_url else ""
+        
+        # 添加统计信息
+        stats_parts = []
+        if paper.hf_upvotes is not None:
+            stats_parts.append(f"👍 {paper.hf_upvotes} upvotes")
+        if paper.github_stars is not None:
+            stats_parts.append(f"⭐ {paper.github_stars} stars")
+        
+        if stats_parts:
+            message += f"� {' | '.join(stats_parts)}\n\n"
+        
+        # 添加链接
+        links = [f"[HuggingFace]({paper.url})"]
+        if paper.arxiv_url:
+            links.append(f"[ArXiv]({paper.arxiv_url})")
+        if paper.github_url:
+            links.append(f"[GitHub]({paper.github_url})")
+        
+        message += f"🔗 *Read More：* {' | '.join(links)}"
         
         return message
     

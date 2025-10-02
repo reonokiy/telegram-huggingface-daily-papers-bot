@@ -56,6 +56,9 @@ class PaperStorage:
             'url': str(paper.url),
             'hero_image': str(paper.hero_image) if paper.hero_image else None,
             'arxiv_url': str(paper.arxiv_url) if paper.arxiv_url else None,
+            'github_url': str(paper.github_url) if paper.github_url else None,
+            'github_stars': paper.github_stars,
+            'hf_upvotes': paper.hf_upvotes,
             'collected_at': datetime.now().isoformat(),
         }
     
