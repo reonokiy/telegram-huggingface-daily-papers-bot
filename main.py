@@ -85,9 +85,54 @@ class HuggingFacePaperBot:
         except Exception as e:
             print(f"⚠️  翻译失败: {e}")
             return text  # 翻译失败时返回原文
+    
+    async def summarize_abstract(self, text: str, max_length: int = 300) -> str:
+        """使用 AI 总结摘要到指定长度
         
-    def format_paper_message(self, paper: Paper, translated_abstract: str = None) -> str:
-        """格式化论文消息"""
+        Args:
+            text: 原始摘要文本
+            max_length: 目标长度（字符数）
+            
+        Returns:
+            总结后的摘要
+        """
+        # 如果没有启用 AI 或者文本已经够短，直接返回
+        if not self.enable_translation or len(text) <= max_length:
+            return text
+        
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"You are an expert at summarizing academic papers. Summarize the following abstract to approximately {max_length} characters while preserving the key points and technical terms. Be concise but informative."
+                    },
+                    {
+                        "role": "user",
+                        "content": text
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=max_length
+            )
+            
+            summary = response.choices[0].message.content.strip()
+            return summary
+        
+        except Exception as e:
+            print(f"⚠️  摘要总结失败: {e}")
+            # 失败时使用简单截取
+            return text[:max_length] + "..." if len(text) > max_length else text
+        
+    def format_paper_message(self, paper: Paper, translated_abstract: str = None, max_length: int = None) -> str:
+        """格式化论文消息
+        
+        Args:
+            paper: 论文对象
+            translated_abstract: 翻译后的摘要（可选）
+            max_length: 最大消息长度（带图片时使用1024，纯文本时使用4096）
+        """
         # 转义Markdown特殊字符
         def escape_markdown(text: str) -> str:
             special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
@@ -106,6 +151,18 @@ class HuggingFacePaperBot:
             abstract = translated_abstract
         else:
             abstract = paper.abstract
+        
+        # 注意：摘要长度控制在调用此函数前通过 AI 总结完成
+        # 这里只做最后的安全截取（以防万一）
+        if max_length:
+            # 预估其他部分的长度（标题、作者、链接等）
+            other_parts_length = len(title) + len(authors) + 200  # 200为其他固定文本的估算
+            available_for_abstract = max_length - other_parts_length
+            
+            if available_for_abstract > 100:  # 至少保留100字符给摘要
+                if len(abstract) > available_for_abstract:
+                    # 安全截取（通常不应该到这一步，因为已经用 AI 总结过了）
+                    abstract = abstract[:available_for_abstract - 3] + "..."
 
         abstract = escape_markdown(abstract) if abstract else "No abstract available"
         
@@ -137,16 +194,33 @@ class HuggingFacePaperBot:
     async def send_paper(self, paper: Paper):
         """发送单篇论文到频道"""
         try:
-            # 如果启用翻译，先翻译摘要
-            translated_abstract = None
+            # 准备摘要：翻译或总结
+            processed_abstract = None
+            
             if self.enable_translation and paper.abstract:
-                print("  🌐 正在翻译摘要...")
-                translated_abstract = await self.translate_text(paper.abstract[:500])  # 只翻译前500字符
+                # 如果启用了 AI，使用智能处理
+                if paper.hero_image:
+                    # 带图片：先总结到合适长度，再翻译
+                    print("  🤖 使用 AI 总结摘要...")
+                    summarized = await self.summarize_abstract(paper.abstract, max_length=300)
+                    print("  🌐 翻译摘要...")
+                    processed_abstract = await self.translate_text(summarized)
+                else:
+                    # 纯文本：直接翻译（可以更长）
+                    print("  🌐 翻译摘要...")
+                    summarized = await self.summarize_abstract(paper.abstract, max_length=600)
+                    processed_abstract = await self.translate_text(summarized)
+            elif paper.abstract:
+                # 没有启用 AI，只做长度控制
+                if paper.hero_image:
+                    processed_abstract = paper.abstract[:300] + "..." if len(paper.abstract) > 300 else paper.abstract
+                else:
+                    processed_abstract = paper.abstract[:800] + "..." if len(paper.abstract) > 800 else paper.abstract
             
-            message = self.format_paper_message(paper, translated_abstract)
-            
-            # 如果有缩略图，发送带图片的消息
+            # 格式化并发送消息
             if paper.hero_image:
+                # 带图片消息（caption 限制 1024 字符）
+                message = self.format_paper_message(paper, processed_abstract, max_length=1000)
                 await self.bot.send_photo(
                     chat_id=self.channel_id,
                     photo=str(paper.hero_image),
@@ -154,6 +228,8 @@ class HuggingFacePaperBot:
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
             else:
+                # 纯文本消息（限制 4096 字符）
+                message = self.format_paper_message(paper, processed_abstract, max_length=4000)
                 await self.bot.send_message(
                     chat_id=self.channel_id,
                     text=message,

@@ -315,15 +315,20 @@ python main.py## 📋 如何获取 Telegram 配置
 | `TELEGRAM_CHANNEL_ID` | Telegram 频道 ID | 必填 |
 | `CHECK_INTERVAL` | 检查间隔（秒） | 3600 |
 
-### AI 翻译配置
+### AI 功能配置（翻译 + 智能总结）
 
 | 环境变量 | 说明 | 默认值 |
 |---------|------|--------|
-| `ENABLE_AI_TRANSLATION` | 是否启用翻译 | false |
+| `ENABLE_AI_TRANSLATION` | 是否启用 AI 功能 | false |
 | `OPENAI_API_KEY` | OpenAI API Key | - |
 | `OPENAI_BASE_URL` | OpenAI API 端点 | https://api.openai.com/v1 |
 | `OPENAI_MODEL` | 使用的模型 | gpt-4o-mini |
 | `TRANSLATION_TARGET_LANG` | 目标语言 | Chinese |
+
+**AI 功能包括**：
+- 🤖 **智能摘要总结**：将长摘要总结到合适长度（保留关键信息）
+- 🌐 **多语言翻译**：翻译为目标语言
+- ✨ **自动适配**：带图片消息自动总结到更短（~300字符），纯文本可以更长（~600字符）
 
 ### 数据存储配置
 
@@ -458,7 +463,11 @@ python tests/debug_upvotes.pyBot 会在项目目录下创建 `papers_cache.json`
 
 - [CACHE_STORAGE.md](docs/CACHE_STORAGE.md) - 缓存和存储集成原理
 - [FILESYSTEM_STORAGE.md](docs/FILESYSTEM_STORAGE.md) - 文件系统存储说明和扩展性
+- [AI_SUMMARIZATION.md](docs/AI_SUMMARIZATION.md) - AI 智能摘要总结功能
 - [GITHUB_STATS.md](docs/GITHUB_STATS.md) - GitHub 统计功能详解
+- [TELEGRAM_CHANNEL_SETUP.md](docs/TELEGRAM_CHANNEL_SETUP.md) - Telegram 频道配置完整指南
+- [MARKDOWN_V2_FIX.md](docs/MARKDOWN_V2_FIX.md) - Markdown V2 转义问题修复
+- [MESSAGE_LENGTH_LIMIT.md](docs/MESSAGE_LENGTH_LIMIT.md) - 消息长度限制处理
 - [USAGE.md](docs/USAGE.md) - 详细使用指南
 - [DOCKER.md](docs/DOCKER.md) - Docker 部署指南
 - [PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) - 项目总结
