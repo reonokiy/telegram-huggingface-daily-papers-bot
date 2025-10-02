@@ -105,9 +105,8 @@ class HuggingFacePaperBot:
         if translated_abstract:
             abstract = translated_abstract
         else:
-            # 摘要截取前300字符
-            abstract = paper.abstract[:300] + "..." if len(paper.abstract) > 300 else paper.abstract
-        
+            abstract = paper.abstract
+
         abstract = escape_markdown(abstract) if abstract else "No abstract available"
         
         message = f"*{title}*\n\n"
@@ -122,7 +121,7 @@ class HuggingFacePaperBot:
             stats_parts.append(f"⭐ {paper.github_stars} stars")
         
         if stats_parts:
-            message += f"� {' | '.join(stats_parts)}\n\n"
+            message += f"📊 {' \\| '.join(stats_parts)}\n\n"
         
         # 添加链接
         links = [f"[HuggingFace]({paper.url})"]
@@ -131,7 +130,7 @@ class HuggingFacePaperBot:
         if paper.github_url:
             links.append(f"[GitHub]({paper.github_url})")
         
-        message += f"🔗 *Read More：* {' | '.join(links)}"
+        message += f"🔗 *Read More：* {' \\| '.join(links)}"
         
         return message
     
