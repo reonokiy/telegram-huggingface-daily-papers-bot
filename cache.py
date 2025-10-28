@@ -15,7 +15,7 @@ class PaperCache:
         if initial_ids:
             self.cached_ids.update(initial_ids)
             self._save_cache()
-            print(f"✅ Cache initialized with {len(self.cached_ids)} paper IDs")
+            print(f"Cache initialized with {len(self.cached_ids)} paper IDs")
     
     def _load_cache(self) -> Set[str]:
         """Load cached paper IDs from file"""
@@ -25,7 +25,7 @@ class PaperCache:
                     data = json.load(f)
                     return set(data.get('paper_ids', []))
             except Exception as e:
-                print(f"⚠️  Failed to load cache: {e}")
+                print(f"Warning: Failed to load cache: {e}")
                 return set()
         return set()
 

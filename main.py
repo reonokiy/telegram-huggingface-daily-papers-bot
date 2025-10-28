@@ -36,7 +36,7 @@ class HuggingFacePaperBot:
         # Initialize OpenAI client (if translation is enabled)
         if self.enable_translation:
             if not Config.OPENAI_API_KEY:
-                print("⚠️  Warning: Translation enabled but OPENAI_API_KEY not configured, translation will be disabled")
+                print("Warning: Translation enabled but OPENAI_API_KEY not configured, translation will be disabled")
                 self.enable_translation = False
             else:
                 try:
@@ -45,9 +45,9 @@ class HuggingFacePaperBot:
                         api_key=Config.OPENAI_API_KEY,
                         base_url=Config.OPENAI_BASE_URL
                     )
-                    print(f"✅ AI translation enabled (model: {Config.OPENAI_MODEL}, target language: {Config.TRANSLATION_TARGET_LANG})")
+                    print(f"AI translation enabled (model: {Config.OPENAI_MODEL}, target language: {Config.TRANSLATION_TARGET_LANG})")
                 except ImportError:
-                    print("⚠️  Warning: openai library not installed, translation will be disabled")
+                    print("Warning: openai library not installed, translation will be disabled")
                     print("    Please run: pip install openai")
                     self.enable_translation = False
     
@@ -77,7 +77,7 @@ class HuggingFacePaperBot:
             return translation
         
         except Exception as e:
-            print(f"⚠️  Translation failed: {e}")
+            print(f"Warning: Translation failed: {e}")
             return text  # Return original text if translation fails
 
     async def summarize_abstract(self, text: str, max_length: int = 300) -> str:
@@ -115,7 +115,7 @@ class HuggingFacePaperBot:
             return summary
 
         except Exception as e:
-            print(f"⚠️  Abstract summarization failed: {e}")
+            print(f"Warning: Abstract summarization failed: {e}")
             # Fall back to simple truncation on failure
             return text[:max_length] + "..." if len(text) > max_length else text
         
@@ -199,13 +199,13 @@ class HuggingFacePaperBot:
                 # If AI is enabled, use intelligent processing
                 if paper.hero_image:
                     # With image: summarize to appropriate length first, then translate
-                    print("  🤖 Using AI to summarize abstract...")
+                    print("  Using AI to summarize abstract...")
                     summarized = await self.summarize_abstract(paper.abstract, max_length=Config.MAX_ABSTRACT_LENGTH_WITH_IMAGE)
-                    print("  🌐 Translating abstract...")
+                    print("  Translating abstract...")
                     processed_abstract = await self.translate_text(summarized)
                 else:
                     # Text only: translate directly (can be longer)
-                    print("  🌐 Translating abstract...")
+                    print("  Translating abstract...")
                     summarized = await self.summarize_abstract(paper.abstract, max_length=Config.MAX_ABSTRACT_LENGTH_WITHOUT_IMAGE)
                     processed_abstract = await self.translate_text(summarized)
             elif paper.abstract:
@@ -234,30 +234,30 @@ class HuggingFacePaperBot:
                     disable_web_page_preview=False
                 )
 
-            print(f"✅ Posted: {paper.title[:50]}")
+            print(f"Posted: {paper.title[:50]}")
             return True
 
         except TelegramError as e:
-            print(f"❌ Posting failed: {e}")
+            print(f"Error: Posting failed: {e}")
             return False
     
     async def check_and_send_new_papers(self) -> None:
         """Check and send new papers"""
-        print(f"\n🔍 Starting to check for new papers... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        
+        print(f"\nStarting to check for new papers... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
         try:
             # Get today's papers
             today = date.today()
             papers = fetch_huggingface_papers(today)
-            print(f"📚 Found {len(papers)} papers")
+            print(f"Found {len(papers)} papers")
 
             # Filter out new papers
             new_papers = [
-                paper for paper in papers 
+                paper for paper in papers
                 if not self.cache.is_cached(paper.get_paper_id())
             ]
-            
-            print(f"🆕 Found {len(new_papers)} new papers")
+
+            print(f"Found {len(new_papers)} new papers")
 
             # Save all paper data to local Parquet files (including new and existing papers)
             if papers:
@@ -275,26 +275,26 @@ class HuggingFacePaperBot:
             # Batch add to cache
             if sent_papers:
                 self.cache.add_batch([p.get_paper_id() for p in sent_papers])
-                print(f"✨ Successfully posted {len(sent_papers)} new papers")
+                print(f"Successfully posted {len(sent_papers)} new papers")
             else:
-                print("💤 No new papers")
-            
+                print("No new papers")
+
             # Check if monthly archiving is needed (archive last month on the 1st of each month)
             if today.day == 1:
                 last_month = today.month - 1 if today.month > 1 else 12
                 last_year = today.year if today.month > 1 else today.year - 1
-                print(f"📦 Starting to archive data for {last_year}-{last_month:02d}...")
+                print(f"Starting to archive data for {last_year}-{last_month:02d}...")
                 self.storage.archive_month(last_year, last_month, delete_daily_files=False)
-                
+
         except Exception as e:
-            print(f"❌ Error while checking papers: {e}")
+            print(f"Error while checking papers: {e}")
     
     async def run(self) -> None:
         """Run the bot (scheduled checking)"""
-        print("🤖 HuggingFace Daily Papers Bot started")
-        print(f"📢 Posting channel: {self.channel_id}")
-        print(f"⏱️  Check interval: {Config.CHECK_INTERVAL} seconds")
-        print(f"💾 Cached papers count: {self.cache.size()}\n")
+        print("HuggingFace Daily Papers Bot started")
+        print(f"Posting channel: {self.channel_id}")
+        print(f"Check interval: {Config.CHECK_INTERVAL} seconds")
+        print(f"Cached papers count: {self.cache.size()}\n")
         
         # Initial check immediately
         await self.check_and_send_new_papers()
@@ -311,7 +311,7 @@ async def main() -> None:
     try:
         Config.validate()
     except ValueError as e:
-        print(f"❌ Configuration error: {e}")
+        print(f"Error: Configuration error: {e}")
         print("   Please set the required environment variables")
         return
     
@@ -328,5 +328,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n\n👋 Bot stopped")
+        print("\n\nBot stopped")
 

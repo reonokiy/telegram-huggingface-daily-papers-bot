@@ -44,10 +44,10 @@ class PaperStorage:
         # Initialize OpenDAL filesystem Operator
         try:
             self.operator = opendal.Operator("fs", root=str(self.archive_dir))
-            print(f"✓ Data directory: {self.local_data_dir}")
-            print(f"✓ Archive directory: {self.archive_dir}")
+            print(f"Data directory: {self.local_data_dir}")
+            print(f"Archive directory: {self.archive_dir}")
         except Exception as e:
-            print(f"⚠️  OpenDAL initialization failed: {e}")
+            print(f"Warning: OpenDAL initialization failed: {e}")
             print("   Will use standard file operations")
             self.operator = None
     
@@ -107,17 +107,17 @@ class PaperStorage:
                 # Deduplicate (based on paper_id, keep first occurrence)
                 combined_df = combined_df.drop_duplicates(subset=['paper_id'], keep='first')
                 df = combined_df
-                print(f"✓ Merged data: {len(existing_df)} existing + {len(new_df)} new = {len(df)} after deduplication")
+                print(f"Merged data: {len(existing_df)} existing + {len(new_df)} new = {len(df)} after deduplication")
             except Exception as e:
-                print(f"⚠️  Failed to read existing file, will overwrite: {e}")
+                print(f"Warning: Failed to read existing file, will overwrite: {e}")
                 df = new_df
         else:
             df = new_df
-            print(f"✓ Created new file: {len(df)} papers")
+            print(f"Created new file: {len(df)} papers")
 
         # Save as Parquet file
         df.to_parquet(filepath, engine='pyarrow', compression='snappy', index=False)
-        print(f"✓ Saved to: {filepath}")
+        print(f"Saved to: {filepath}")
 
         return filepath
     
@@ -157,7 +157,7 @@ class PaperStorage:
 
         merged_df.to_parquet(merged_path, engine='pyarrow', compression='snappy', index=False)
 
-        print(f"✓ Merged {len(files)} files, total {len(merged_df)} papers: {merged_path}")
+        print(f"Merged {len(files)} files, total {len(merged_df)} papers: {merged_path}")
         return merged_path
     
     def archive_month(self, year: int, month: int, delete_daily_files: bool = False) -> bool:
@@ -188,9 +188,9 @@ class PaperStorage:
                 # Write using OpenDAL
                 archive_key = f"{year}/{year}{month:02d}.parquet"
                 self.operator.write(archive_key, content)
-                print(f"✓ Written to archive via OpenDAL: {archive_key}")
+                print(f"Written to archive via OpenDAL: {archive_key}")
             except Exception as e:
-                print(f"⚠️  OpenDAL write failed: {e}")
+                print(f"Warning: OpenDAL write failed: {e}")
                 print("   File saved to local archive directory")
 
         # 3. Delete daily files (optional)
@@ -199,9 +199,9 @@ class PaperStorage:
             for file in files:
                 try:
                     file.unlink()
-                    print(f"✓ Deleted daily file: {file.name}")
+                    print(f"Deleted daily file: {file.name}")
                 except Exception as e:
-                    print(f"✗ Delete failed {file}: {e}")
+                    print(f"Error: Delete failed {file}: {e}")
 
         print(f"=== Archive completed {year}-{month:02d} ===\n")
         return True
@@ -242,9 +242,9 @@ class PaperStorage:
                         df = pd.read_parquet(file, columns=['paper_id'])
                         paper_ids.update(df['paper_id'].tolist())
                     except Exception as e:
-                        print(f"⚠️  Failed to read file {file}: {e}")
+                        print(f"Warning: Failed to read file {file}: {e}")
 
-        print(f"📚 Loaded {len(paper_ids)} paper IDs from storage")
+        print(f"Loaded {len(paper_ids)} paper IDs from storage")
         return paper_ids
     
     def get_statistics(self) -> dict:
