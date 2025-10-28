@@ -1,8 +1,12 @@
+import json
+import re
+import time
+from typing import Dict, List, Optional, Any
+
 import requests
+from bs4 import BeautifulSoup
 from pydantic import BaseModel, AnyHttpUrl
 from datetime import date
-from bs4 import BeautifulSoup
-import time
 
 class Paper(BaseModel):
     title: str
@@ -16,29 +20,32 @@ class Paper(BaseModel):
     hf_upvotes: int | None = None
     
     def get_paper_id(self) -> str:
-        """从URL中提取论文ID作为唯一标识"""
+        """Extract paper ID from URL as unique identifier"""
         return str(self.url).split('/')[-1]
 
-def fetch_paper_details(paper_url: str) -> dict:
-    """获取单篇论文的详细信息（完整摘要和作者列表）"""
+
+PaperDetails = Dict[str, Any]
+
+def fetch_paper_details(paper_url: str) -> PaperDetails:
+    """Fetch detailed information for a single paper (full abstract and author list)"""
     response = requests.get(paper_url)
     response.raise_for_status()
     
     soup = BeautifulSoup(response.content, 'html.parser')
     
-    # 提取完整摘要
+    # Extract full abstract
     abstract = ""
     abstract_section = soup.find('div', class_='pb-8 pr-4 md:pr-16')
     if abstract_section:
-        # 查找 Abstract 标题后的内容
+        # Find content after Abstract heading
         abstract_heading = abstract_section.find('h2', string=lambda x: x and 'Abstract' in x)
         if abstract_heading:
-            # 获取紧随其后的段落
+            # Get the paragraph immediately following
             next_elem = abstract_heading.find_next_sibling()
             if next_elem:
                 abstract = next_elem.get_text(strip=True)
-    
-    # 如果上面的方法没找到，尝试另一种方式
+
+    # If the above method didn't find it, try another approach
     if not abstract:
         abstract_div = soup.find('div', {'class': lambda x: x and 'prose' in x})
         if abstract_div:
@@ -46,26 +53,25 @@ def fetch_paper_details(paper_url: str) -> dict:
             if paragraphs:
                 abstract = paragraphs[0].get_text(strip=True)
     
-    # 提取完整作者列表
+    # Extract full author list
     authors = []
-    # 方法1: 查找 class="author" 的元素
+    # Method 1: Find elements with class="author"
     author_elements = soup.find_all('span', class_='author')
     for author_elem in author_elements:
-        # 提取作者名字（可能在 button 或 a 标签中）
+        # Extract author name (may be in button or a tag)
         name_elem = author_elem.find('button') or author_elem.find('a')
         if name_elem:
             author_name = name_elem.get_text(strip=True)
         else:
-            # 直接从 span 中提取
+            # Extract directly from span
             author_name = author_elem.get_text(strip=True).replace(',', '').strip()
-        
+
         if author_name and author_name not in authors and author_name != ',':
             authors.append(author_name)
-    
-    # 方法2: 如果上面没找到，尝试从 data-props 的 JSON 中提取
+
+    # Method 2: If not found above, try extracting from data-props JSON
     if not authors:
-        import json
-        # 查找包含作者信息的 script 或 div
+        # Find script or div containing author information
         for elem in soup.find_all(['div', 'script']):
             if 'data-props' in elem.attrs:
                 try:
@@ -78,46 +84,45 @@ def fetch_paper_details(paper_url: str) -> dict:
                 except Exception:
                     pass
     
-    # 提取 arXiv URL
+    # Extract arXiv URL
     arxiv_url = None
     arxiv_link = soup.find('a', href=lambda x: x and 'arxiv.org/abs/' in x)
     if arxiv_link:
         arxiv_url = arxiv_link.get('href')
     
-    # 提取 GitHub URL
+    # Extract GitHub URL
     github_url = None
     github_stars = None
     github_link = soup.find('a', href=lambda x: x and 'github.com' in x)
     if github_link:
         github_url = github_link.get('href')
-        # 如果链接不是完整的 URL，补全它
+        # Complete the URL if it's not a full URL
         if github_url and not github_url.startswith('http'):
             github_url = 'https://github.com' + github_url if github_url.startswith('/') else 'https://github.com/' + github_url
-        
-        # 尝试从链接旁边的文本或元素中提取 stars 数
-        # 查找包含 stars 的元素（可能在按钮或 span 中）
+
+        # Try to extract star count from text or elements near the link
+        # Find elements containing stars (may be in button or span)
         parent = github_link.find_parent()
         if parent:
-            # 查找包含数字和 'star' 关键词的文本
+            # Find text containing numbers and 'star' keyword
             stars_text = parent.get_text()
-            import re
-            # 匹配数字（可能包含 k, K 等后缀）
+            # Match numbers (may include k, K suffix)
             stars_match = re.search(r'(\d+\.?\d*)\s*[kK]?\s*(?:star|★)', stars_text, re.IGNORECASE)
             if stars_match:
                 stars_str = stars_match.group(1)
                 try:
                     stars_val = float(stars_str)
-                    # 如果文本中有 'k' 或 'K'，乘以 1000
+                    # If text contains 'k' or 'K', multiply by 1000
                     if 'k' in stars_text.lower():
                         stars_val *= 1000
                     github_stars = int(stars_val)
                 except ValueError:
                     pass
-        
-        # 如果上面没找到，尝试通过 GitHub API 获取
+
+        # If not found above, try fetching via GitHub API
         if github_stars is None and github_url:
             try:
-                # 从 URL 提取 owner/repo
+                # Extract owner/repo from URL
                 url_parts = github_url.rstrip('/').split('github.com/')[-1].split('/')
                 if len(url_parts) >= 2:
                     owner, repo = url_parts[0], url_parts[1]
@@ -127,16 +132,15 @@ def fetch_paper_details(paper_url: str) -> dict:
                         gh_data = gh_response.json()
                         github_stars = gh_data.get('stargazers_count')
             except Exception as e:
-                print(f"  获取 GitHub stars 失败: {e}")
+                print(f"  Failed to fetch GitHub stars: {e}")
     
-    # 提取 HuggingFace upvotes
+    # Extract HuggingFace upvotes
     hf_upvotes = None
-    import re
-    
-    # 查找包含 "Upvote" 文本的元素
+
+    # Find elements containing "Upvote" text
     for elem in soup.find_all(['div', 'button', 'span']):
         text = elem.get_text(strip=True)
-        # 匹配 "Upvote123" 或 "Upvote 123" 格式
+        # Match "Upvote123" or "Upvote 123" format
         upvote_match = re.search(r'Upvote\s*(\d+)', text, re.IGNORECASE)
         if upvote_match:
             try:
@@ -154,7 +158,7 @@ def fetch_paper_details(paper_url: str) -> dict:
         'hf_upvotes': hf_upvotes
     }
 
-def fetch_huggingface_papers(target_date: date):
+def fetch_huggingface_papers(target_date: date) -> List[Paper]:
     url = f"https://huggingface.co/papers/date/{target_date.strftime('%Y-%m-%d')}"
     response = requests.get(url)
     response.raise_for_status()
@@ -162,11 +166,11 @@ def fetch_huggingface_papers(target_date: date):
     soup = BeautifulSoup(response.content, 'html.parser')
     papers = []
     
-    # 查找所有论文卡片
+    # Find all paper cards
     paper_cards = soup.find_all('article', class_='relative flex flex-col overflow-hidden rounded-xl border')
-    
+
     for card in paper_cards:
-        # 提取标题和URL
+        # Extract title and URL
         title_link = card.find('h3').find('a') if card.find('h3') else None
         if not title_link:
             continue
@@ -174,24 +178,24 @@ def fetch_huggingface_papers(target_date: date):
         title = title_link.get_text(strip=True)
         paper_url = "https://huggingface.co" + title_link.get('href', '')
         
-        # 提取缩略图
+        # Extract thumbnail
         hero_image = None
         img_elem = card.find('img')
         if img_elem and img_elem.get('src'):
             hero_image = img_elem.get('src')
             if hero_image.startswith('/'):
                 hero_image = "https://huggingface.co" + hero_image
-        
-        # 获取论文详细信息（完整摘要和作者）
-        print(f"正在获取论文详情: {title[:50]}...")
+
+        # Fetch paper details (full abstract and authors)
+        print(f"Fetching paper details: {title[:50]}...")
         try:
             details = fetch_paper_details(paper_url)
-            time.sleep(0.5)  # 避免请求过快
+            time.sleep(0.5)  # Avoid making requests too quickly
         except Exception as e:
-            print(f"获取论文详情失败: {e}")
+            print(f"Failed to fetch paper details: {e}")
             details = {
-                'authors': [], 
-                'abstract': '', 
+                'authors': [],
+                'abstract': '',
                 'arxiv_url': None,
                 'github_url': None,
                 'github_stars': None,
