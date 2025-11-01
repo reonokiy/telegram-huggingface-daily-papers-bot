@@ -33,7 +33,7 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code
-COPY hf.py cache.py storage.py main.py ./
+COPY hf.py cache.py storage.py main.py config.py ./
 
 # Create data directory and set permissions
 RUN mkdir -p /app/data && \
